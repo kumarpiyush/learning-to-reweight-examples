@@ -1,6 +1,8 @@
 data/
 results/
 *_pb2.py
+*.swp
+*.gz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
