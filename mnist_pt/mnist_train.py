@@ -69,7 +69,11 @@ def train_and_test(corruption_level=0, gold_fraction=0.5, get_C=uniform_mix_C):
     print("num_gold = {}, num_silver = {}".format(num_gold, num_silver))
     print(dataset["x"].shape)
 
+    sample_batch_x = torch.from_numpy(dataset["x"][:100].reshape([-1, 1, 28, 28]))
+    sample_batch_y = torch.from_numpy(dataset["y"][:100])
+
     model = LeNet()
+    model.forward(sample_batch_x)
 
 
 def main(args) :
