@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tensorflow.examples.tutorials.mnist import input_data
+from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
 from collections import Counter
 
 from model import LeNet
@@ -34,10 +35,11 @@ def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
     for i in range(num_silver):
         mnist_labels[i] = np.random.choice(num_classes, p=corruption_matrix[mnist_labels[i]])
 
-    dataset = {'x': mnist_images.reshape([-1, 1, 28, 28]), 'y': mnist_labels}
-    gold = {'x': dataset['x'][num_silver:], 'y': dataset['y'][num_silver:]}
+    dataset = {'x': mnist_images, 'y': mnist_labels}
+    gold = DataSet(dataset['x'][num_silver:], dataset['y'][num_silver:], reshape=False)
+    silver = DataSet(dataset['x'][:num_silver], dataset['y'][:num_silver], reshape=False)
 
-    return dataset, gold, num_gold, num_silver
+    return gold, silver, num_gold, num_silver
 
 
 def uniform_mix_C(mixing_ratio):
@@ -69,8 +71,8 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
 
     C = get_C(corruption_level)
 
-    dataset, gold, num_gold, num_silver = prepare_data(C, gold_fraction)
-    print("Training set shape = {}, num_gold = {}, num_silver = {}".format(dataset["x"].shape, num_gold, num_silver))
+    gold, silver, num_gold, num_silver = prepare_data(C, gold_fraction)
+    print("Training set shape = {}, num_gold = {}, num_silver = {}".format(gold.images.shape, num_gold, num_silver))
 
     test_x = torch.from_numpy(mnist.test.images[:200].reshape([-1, 1, 28, 28]))
     test_y = torch.from_numpy(mnist.test.labels[:200]).type(torch.LongTensor)
@@ -79,32 +81,28 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     model = LeNet()
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=0.001, weight_decay=1e-6)
 
-    num_batches = num_silver // flags.batch_size
+    for step in range(flags.num_steps) :
+        x, y = silver.next_batch(flags.batch_size)
+        print(x.shape, Counter(y))
+        x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
 
-    for epoch in range(flags.epochs) :
-        indices = np.arange(num_silver)
-        np.random.shuffle(indices)
+        x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
+        x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
 
-        for i in range(num_batches) :
-            offset = i * flags.batch_size
+        # forward
+        logits = model.forward(x_val)
 
-            batch_x = torch.from_numpy(dataset["x"][indices[offset : offset+flags.batch_size]])
-            batch_y = torch.from_numpy(dataset["y"][indices[offset : offset+flags.batch_size]])
+        # backward
+        loss = F.cross_entropy(logits, y_val)
+        print("Loss = {}".format(loss))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-            # forward
-            logits = model.forward(batch_x)
-
-            # backward
-            loss = F.cross_entropy(logits, batch_y)
-            print("Loss = {}".format(loss))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        model.eval()
-        pred = torch.max(model.forward(test_x), 1)[1]
-        acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
-        print("Accuracy = {}".format(acc))
+    model.eval()
+    pred = torch.max(model.forward(test_x), 1)[1]
+    acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
+    print("Accuracy = {}".format(acc))
 
 
 def main(flags) :
@@ -119,8 +117,9 @@ def main(flags) :
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--corruption_type", default="flip_labels", type=str, choices=["uniform_mix", "flip_labels"])
-    parser.add_argument("--epochs", default=5, type=int)
+    parser.add_argument("--num_steps", default=1000, type=int)
     parser.add_argument("--batch_size", default=100, type=int)
+    parser.add_argument("--nval", default=40, type=int)
 
     args = parser.parse_args()
 
