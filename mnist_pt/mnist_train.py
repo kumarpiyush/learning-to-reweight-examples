@@ -39,7 +39,7 @@ def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
     gold = DataSet(dataset['x'][num_silver:], dataset['y'][num_silver:], reshape=False)
     silver = DataSet(dataset['x'][:num_silver], dataset['y'][:num_silver], reshape=False)
 
-    return gold, silver, num_gold, num_silver
+    return gold, silver
 
 
 def uniform_mix_C(mixing_ratio):
@@ -71,29 +71,28 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
 
     C = get_C(corruption_level)
 
-    gold, silver, num_gold, num_silver = prepare_data(C, gold_fraction)
-    print("Training set shape = {}, num_gold = {}, num_silver = {}".format(gold.images.shape, num_gold, num_silver))
+    gold, silver = prepare_data(C, gold_fraction)
+    print("Gold shape = {}, Silver shape = {}".format(gold.images.shape, silver.images.shape))
 
     test_x = torch.from_numpy(mnist.test.images[:200].reshape([-1, 1, 28, 28]))
     test_y = torch.from_numpy(mnist.test.labels[:200]).type(torch.LongTensor)
-    print("Test set shape = {}".format(test_x.shape))
+    print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=0.001, weight_decay=1e-6)
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
-        print(x.shape, Counter(y))
         x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
 
         x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
         x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
 
         # forward
-        logits = model.forward(x_val)
+        logits = model.forward(x)
 
         # backward
-        loss = F.cross_entropy(logits, y_val)
+        loss = F.cross_entropy(logits, y)
         print("Loss = {}".format(loss))
         optimizer.zero_grad()
         loss.backward()
