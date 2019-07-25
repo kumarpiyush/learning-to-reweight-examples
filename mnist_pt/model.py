@@ -51,7 +51,7 @@ class LeNet(nn.Module) :
         self.conv3 = DynamicConv2D(32, 64, 5, padding=2)
 
         self.fc4 = DynamicLinear(1024, 100)
-        self.fc5 = DynamicLinear(100, 10)
+        self.fc5 = DynamicLinear(100, 2)
 
     def forward(self, x) :
         tval = self.conv1.forward(x)

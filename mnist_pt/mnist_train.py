@@ -5,13 +5,28 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
+from tensorflow.contrib.learn.python.learn.datasets.base import Datasets
 from collections import Counter
 
 from model import LeNet, reweight_autodiff
 
 
 mnist = input_data.read_data_sets(train_dir='mnist', one_hot=False)
-num_classes = 10
+
+one_label = 9
+zero_label = 4
+
+tr_idx = [i for i in np.arange(len(mnist.train.labels)) if (mnist.train.labels[i] in [one_label, zero_label])]
+val_idx = [i for i in np.arange(len(mnist.validation.labels)) if (mnist.validation.labels[i] in [one_label, zero_label])]
+test_idx = [i for i in np.arange(len(mnist.test.labels)) if (mnist.test.labels[i] in [one_label, zero_label])]
+
+mnist_train = DataSet(mnist.train.images[tr_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.train.labels[tr_idx]))), reshape=False)
+mnist_validation = DataSet(mnist.validation.images[val_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.validation.labels[val_idx]))), reshape=False)
+mnist_test = DataSet(mnist.test.images[test_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.test.labels[test_idx]))), reshape=False)
+
+mnist = Datasets(train=mnist_train, validation=mnist_validation, test=mnist_test)
+
+num_classes = 2
 dbg_steps = 20
 
 
