@@ -33,7 +33,7 @@ import os
 import six
 import tensorflow as tf
 
-from collections import namedtuple, Counter
+from collections import namedtuple
 from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
 from tensorflow.examples.tutorials.mnist import input_data
 from tqdm import tqdm
@@ -150,30 +150,7 @@ def get_imbalance_dataset(mnist,
                           class_0=4,
                           class_1=9):
     rnd = np.random.RandomState(seed)
-    
-    train_images = mnist.train.images
-    train_labels = mnist.train.labels
-    idx = np.arange(train_images.shape[0])
-    rnd.shuffle(idx)
-    train_images = train_images[idx][:ntrain]
-    train_labels = train_labels[idx][:ntrain]
 
-    validation_images = mnist.validation.images
-    validation_labels = mnist.validation.labels
-    idx = np.arange(validation_images.shape[0])
-    rnd.shuffle(idx)
-    validation_images = validation_images[idx][:nval]
-    validation_labels = validation_labels[idx][:nval]
-
-    test_images = mnist.test.images
-    test_labels = mnist.test.labels
-    idx = np.arange(test_images.shape[0])
-    rnd.shuffle(idx)
-    test_images = test_images[idx][:ntest]
-    test_labels = test_labels[idx][:ntest]
-
-    return DataSet(train_images, train_labels, reshape=False), DataSet(validation_images, validation_labels, reshape=False), DataSet(test_images, test_labels, reshape=False), None, None
-    
     # In training, we have 10% 4 and 90% 9.
     # In testing, we have 50% 4 and 50% 9.
     ratio = 1 - pos_ratio
@@ -307,8 +284,7 @@ def evaluate(sess, x_, y_, acc_, train_set, test_set):
 
 
 def get_acc(logits, y):
-    #prediction = tf.cast(tf.sigmoid(logits) > 0.5, tf.float32)
-    prediction = tf.argmax(tf.nn.softmax(logits), axis=1, output_type=tf.int32)
+    prediction = tf.cast(tf.sigmoid(logits) > 0.5, tf.float32)
     return tf.reduce_mean(tf.cast(tf.equal(prediction, y), tf.float32))
 
 
@@ -327,15 +303,10 @@ def run(dataset, exp_name, seed, verbose=True):
         bsize = config.bsize
         train_set, val_set, test_set, train_pos_set, train_neg_set = get_imbalance_dataset(
             dataset, pos_ratio=pos_ratio, ntrain=ntrain, nval=config.nval, ntest=ntest, seed=seed)
-        
-        print(train_set.images.shape)
-        print(Counter(train_set.labels))
-        print(val_set.images.shape)
-
         # if config.nval == 0:
         #     val_set = BalancedDataSet(train_pos_set, train_neg_set)
         x_ = tf.placeholder(tf.float32, [None, 784], name='x')
-        y_ = tf.placeholder(tf.int32, [None], name='y')
+        y_ = tf.placeholder(tf.float32, [None], name='y')
         x_val_ = tf.placeholder(tf.float32, [None, 784], name='x_val')
         y_val_ = tf.placeholder(tf.float32, [None], name='y_val')
         ex_wts_ = tf.placeholder(tf.float32, [None], name='ex_wts')
@@ -399,7 +370,6 @@ def run(dataset, exp_name, seed, verbose=True):
         sess.run(tf.global_variables_initializer())
         for step in six.moves.xrange(num_steps):
             x, y = train_set.next_batch(bsize)
-            #print(y)
             x_val, y_val = val_set.next_batch(min(bsize, nval))
 
             # Use 50% learning rate for the second half of training.
