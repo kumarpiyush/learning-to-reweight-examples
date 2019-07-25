@@ -98,28 +98,12 @@ def reweight_autodiff(model, x, y, x_val, y_val) :
     model_vars = list(model.named_parameters())
     model_var_grads = torch.autograd.grad([loss], [p for name, p in model_vars], create_graph=True)
     model_vars_new = dict([(var[0], var[1] - g) for var, g in zip(model_vars, model_var_grads)])
-    model_vars_new_dd = dict([(var[0], var[1] - g * 0.5) for var, g in zip(model_vars, model_var_grads)])
-
-    print([model_vars_new["conv1.bias"]])
-
-    print(torch.autograd.grad([model_vars_new["conv1.bias"].sum()], [ex_wts], retain_graph=True)[0] * 2)
-    print(torch.autograd.grad([model_vars_new_dd["conv1.bias"].sum()], [ex_wts], retain_graph=True)[0] * 2)
-    exit(1)
 
     model2 = LeNet()
     model2.set_tensors(model_vars_new)
 
-    model2_dd = LeNet()
-    model2_dd.set_tensors(model_vars_new_dd)
-
     ex_wts_val = torch.ones([x_val.shape[0]], requires_grad=False) / len(x_val)
     logits_val, loss_val = model2.loss(x_val, y_val, ex_wts_val)
     ex_wts_grad = torch.autograd.grad([loss_val], [ex_wts], retain_graph=True)
-    print(ex_wts_grad[0])
-
-    ex_wts_val = torch.ones([x_val.shape[0]], requires_grad=False) / len(x_val)
-    logits_val, loss_val = model2_dd.loss(x_val, y_val, ex_wts_val)
-    ex_wts_grad = torch.autograd.grad([loss_val], [ex_wts], retain_graph=True)
-    print(ex_wts_grad[0] * 2)
 
     exit(1)
