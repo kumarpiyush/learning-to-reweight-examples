@@ -19,6 +19,10 @@ class DynamicConv2D(nn.Module) :
     def named_parameters(self, prefix='', recurse=True) :
         return [("weight", self.weight), ("bias", self.bias)]
 
+    def set_tensors(self, param_dict, prefix="") :
+        self.weight = param_dict[prefix + "weight"]
+        self.bias = param_dict[prefix + "bias"]
+
 class DynamicLinear(nn.Module) :
     def __init__(self, *args, **kwargs) :
         super(DynamicLinear, self).__init__()
@@ -33,6 +37,10 @@ class DynamicLinear(nn.Module) :
 
     def named_parameters(self, prefix='', recurse=True) :
         return [("weight", self.weight), ("bias", self.bias)]
+
+    def set_tensors(self, param_dict, prefix="") :
+        self.weight = param_dict[prefix + "weight"]
+        self.bias = param_dict[prefix + "bias"]
 
 class LeNet(nn.Module) :
     def __init__(self, tensor_dict = {}) :
@@ -78,17 +86,21 @@ class LeNet(nn.Module) :
 
         return res
 
+    def set_tensors(self, param_dict, prefix="") :
+        for name, ch in self.named_children() :
+            ch.set_tensors(param_dict, prefix + name + ".")
+
 
 def reweight_autodiff(model, x, y, x_val, y_val) :
     ex_wts = torch.ones([x.shape[0]])
     logits, loss = model.loss(x, y, ex_wts)
 
     model_vars = list(model.named_parameters())
-
     model_var_grads = torch.autograd.grad([loss], [p for name, p in model_vars], create_graph=True)
-    print([p.sum() for p in model_var_grads])
+    model_vars_new = dict([(var[0], var[1] - g) for var, g in zip(model_vars, model_var_grads)])
+
+    model2 = LeNet()
+    model2.set_tensors(model_vars_new)
+    model2.debug()
+
     exit(1)
-
-    model_vars_new = [(var[0], var[1] - g) for var, g in zip(model_vars, model_var_grads)]
-
-    model2 = LeNet(model_vars_new)
