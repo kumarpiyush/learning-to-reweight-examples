@@ -79,7 +79,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
-    optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=0.001, weight_decay=1e-6)
+    optimizer = torch.optim.Adam([p for p in model.parameters()], lr=0.001, weight_decay=1e-6)
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
@@ -90,9 +90,9 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
 
         # forward
         logits, loss = model.loss(x, y)
+        print("Loss = {}".format(loss))
 
         # backward
-        print("Loss = {}".format(loss))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

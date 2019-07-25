@@ -1,42 +1,67 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LeNet(nn.Module) :
-    def __init__(self, initial_values = None) :
-        super(LeNet, self).__init__()
+class DynamicConv2D(nn.Module) :
+    def __init__(self, *args, **kwargs) :
+        super(DynamicConv2D, self).__init__()
 
-        self.conv1 = nn.Conv2d(1, 16, 5, padding=2)
-        self.conv2 = nn.Conv2d(16, 32, 5, padding=2)
-        self.conv3 = nn.Conv2d(32, 64, 5, padding=2)
+        tmp = nn.Conv2d(*args, **kwargs)
 
-        self.fc4 = nn.Linear(1024, 100)
-        self.fc5 = nn.Linear(100, 10)
-
-        if initial_values is not None :
-            for old_p, new_p in zip(self.named_parameters(), initial_values) :
-                old_p[1].data = new_p[1].data
-
-    def debug(self) :
-        print(list(self.named_parameters())[1])
+        self.weight = torch.tensor(tmp.weight.data, requires_grad=True)
+        self.bias = torch.tensor(tmp.bias.data, requires_grad=True)
+        self.padding = tmp.padding
 
     def forward(self, x) :
-        tval = self.conv1(x)
+        return F.conv2d(x, self.weight, self.bias, padding=self.padding)
+
+    def named_parameters(self, prefix='', recurse=True) :
+        return [("weight", self.weight), ("bias", self.bias)]
+
+class DynamicLinear(nn.Module) :
+    def __init__(self, *args, **kwargs) :
+        super(DynamicLinear, self).__init__()
+
+        tmp = nn.Linear(*args, **kwargs)
+
+        self.weight = torch.tensor(tmp.weight.data, requires_grad=True)
+        self.bias = torch.tensor(tmp.bias.data, requires_grad=True)
+
+    def forward(self, x) :
+        return F.linear(x, self.weight, self.bias)
+
+    def named_parameters(self, prefix='', recurse=True) :
+        return [("weight", self.weight), ("bias", self.bias)]
+
+class LeNet(nn.Module) :
+    def __init__(self, tensor_dict = {}) :
+        super(LeNet, self).__init__()
+
+        self.conv1 = DynamicConv2D(1, 16, 5, padding=2)
+        self.conv2 = DynamicConv2D(16, 32, 5, padding=2)
+        self.conv3 = DynamicConv2D(32, 64, 5, padding=2)
+
+        self.fc4 = DynamicLinear(1024, 100)
+        self.fc5 = DynamicLinear(100, 10)
+
+    def forward(self, x) :
+        tval = self.conv1.forward(x)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
-        tval = self.conv2(tval)
+        tval = self.conv2.forward(tval)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
-        tval = self.conv3(tval)
+        tval = self.conv3.forward(tval)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
         tval = tval.view(-1, 1024)
 
-        tval = F.relu(self.fc4(tval))
-        logits = F.relu(self.fc5(tval))
+        tval = F.relu(self.fc4.forward(tval))
+        logits = F.relu(self.fc5.forward(tval))
 
         return logits
 
@@ -46,21 +71,24 @@ class LeNet(nn.Module) :
         if ex_wts is not None : loss = loss * ex_wts
         return logits, loss.mean()
 
+    def named_parameters(self, prefix='', recurse=True) :
+        res = []
+        for name, ch in self.named_children() :
+            res.extend([(name + "." + ch_name, p) for ch_name, p in ch.named_parameters(prefix, recurse)])
+
+        return res
+
 
 def reweight_autodiff(model, x, y, x_val, y_val) :
     ex_wts = torch.ones([x.shape[0]])
     logits, loss = model.loss(x, y, ex_wts)
 
-    model.debug()
-
     model_vars = list(model.named_parameters())
-    model_var_grads = torch.autograd.grad([loss], [p for name, p in model_vars], create_graph=True)
 
-    print(model_var_grads[1])
+    model_var_grads = torch.autograd.grad([loss], [p for name, p in model_vars], create_graph=True)
+    print([p.sum() for p in model_var_grads])
+    exit(1)
 
     model_vars_new = [(var[0], var[1] - g) for var, g in zip(model_vars, model_var_grads)]
-    model.debug()
 
     model2 = LeNet(model_vars_new)
-    model2.debug()
-    exit(1)
