@@ -104,6 +104,13 @@ def reweight_autodiff(model, x, y, x_val, y_val) :
 
     ex_wts_val = torch.ones([x_val.shape[0]], requires_grad=False) / len(x_val)
     logits_val, loss_val = model2.loss(x_val, y_val, ex_wts_val)
-    ex_wts_grad = torch.autograd.grad([loss_val], [ex_wts], retain_graph=True)
+    ex_wts_grad = torch.autograd.grad([loss_val], [ex_wts], retain_graph=True)[0]
+    ex_wts_grad = -ex_wts_grad
+    ex_wts_grad = torch.max(ex_wts_grad, torch.zeros(ex_wts_grad.shape))
 
-    exit(1)
+    ex_wts_sum = ex_wts_grad.sum()
+    ex_wts_sum = ex_wts_sum + (ex_wts_sum == 0)
+
+    ex_wts_norm = ex_wts_grad / ex_wts_sum
+
+    return ex_wts_norm

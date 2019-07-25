@@ -12,6 +12,7 @@ from model import LeNet, reweight_autodiff
 
 mnist = input_data.read_data_sets(train_dir='mnist', one_hot=False)
 num_classes = 10
+dbg_steps = 20
 
 
 def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
@@ -74,12 +75,13 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     gold, silver = prepare_data(C, gold_fraction)
     print("Gold shape = {}, Silver shape = {}".format(gold.images.shape, silver.images.shape))
 
+    # TODO : test on whole set
     test_x = torch.from_numpy(mnist.test.images[:200].reshape([-1, 1, 28, 28]))
     test_y = torch.from_numpy(mnist.test.labels[:200]).type(torch.LongTensor)
     print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
-    optimizer = torch.optim.Adam([p for p in model.parameters()], lr=0.001, weight_decay=1e-6)
+    optimizer = torch.optim.SGD([p for p in model.parameters()], lr=0.1, momentum = 0.9, weight_decay=1e-6)
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
@@ -88,8 +90,21 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
         x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
 
+        if step % dbg_steps == 0 :
+            model.eval()
+
+            pred = torch.max(model.forward(x_val), 1)[1]
+            old_val_acc = torch.sum(torch.eq(pred, y_val)).item() / float(y_val.shape[0])
+
+            pred = torch.max(model.forward(test_x), 1)[1]
+            old_test_acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
+            model.train()
+
+        # get training example weights
+        ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
+
         # forward
-        logits, loss = model.loss(x, y)
+        logits, loss = model.loss(x, y, ex_wts)
         print("Loss = {}".format(loss))
 
         # backward
@@ -97,12 +112,17 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         loss.backward()
         optimizer.step()
 
-        reweight_autodiff(model, x, y, x_val, y_val)
+        if step % dbg_steps == 0 :
+            model.eval()
 
-    model.eval()
-    pred = torch.max(model.forward(test_x), 1)[1]
-    acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
-    print("Accuracy = {}".format(acc))
+            pred = torch.max(model.forward(x_val), 1)[1]
+            new_val_acc = torch.sum(torch.eq(pred, y_val)).item() / float(y_val.shape[0])
+
+            pred = torch.max(model.forward(test_x), 1)[1]
+            new_test_acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
+            model.train()
+
+            print("Old val = {}, New val = {}. Old test = {}, New test = {}.".format(old_val_acc, new_val_acc, old_test_acc, new_test_acc))
 
 
 def main(flags) :
