@@ -7,7 +7,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
 from collections import Counter
 
-from model import LeNet
+from model import LeNet, reweight_autodiff
 
 
 mnist = input_data.read_data_sets(train_dir='mnist', one_hot=False)
@@ -89,14 +89,15 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
 
         # forward
-        logits = model.forward(x)
+        logits, loss = model.loss(x, y)
 
         # backward
-        loss = F.cross_entropy(logits, y)
         print("Loss = {}".format(loss))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        reweight_autodiff(model, x, y, x_val, y_val)
 
     model.eval()
     pred = torch.max(model.forward(test_x), 1)[1]
