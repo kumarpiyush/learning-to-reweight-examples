@@ -9,8 +9,8 @@ class DynamicConv2D(nn.Module) :
 
         tmp = nn.Conv2d(*args, **kwargs)
 
-        self.weight = torch.tensor(tmp.weight.data, requires_grad=True)
-        self.bias = torch.tensor(tmp.bias.data, requires_grad=True)
+        self.weight = tmp.weight.data.clone().detach().requires_grad_(True)
+        self.bias = tmp.bias.data.clone().detach().requires_grad_(True)
         self.padding = tmp.padding
 
     def forward(self, x) :
@@ -25,8 +25,8 @@ class DynamicLinear(nn.Module) :
 
         tmp = nn.Linear(*args, **kwargs)
 
-        self.weight = torch.tensor(tmp.weight.data, requires_grad=True)
-        self.bias = torch.tensor(tmp.bias.data, requires_grad=True)
+        self.weight = tmp.weight.data.clone().detach().requires_grad_(True)
+        self.bias = tmp.bias.data.clone().detach().requires_grad_(True)
 
     def forward(self, x) :
         return F.linear(x, self.weight, self.bias)
