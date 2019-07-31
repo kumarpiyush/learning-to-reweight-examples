@@ -51,7 +51,7 @@ class LeNet(nn.Module) :
         self.conv3 = DynamicConv2D(32, 64, 5, padding=2)
 
         self.fc4 = DynamicLinear(1024, 100)
-        self.fc5 = DynamicLinear(100, 2)
+        self.fc5 = DynamicLinear(100, 10)
 
     def forward(self, x) :
         tval = self.conv1.forward(x)
@@ -92,7 +92,7 @@ class LeNet(nn.Module) :
 
 
 def reweight_autodiff(model, x, y, x_val, y_val) :
-    ex_wts = torch.ones([x.shape[0]], requires_grad=True)
+    ex_wts = torch.zeros([x.shape[0]], requires_grad=True)
     logits, loss = model.loss(x, y, ex_wts)
 
     model_vars = list(model.named_parameters())

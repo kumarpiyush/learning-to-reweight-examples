@@ -13,6 +13,7 @@ from model import LeNet, reweight_autodiff
 
 mnist = input_data.read_data_sets(train_dir='mnist', one_hot=False)
 
+"""
 one_label = 9
 zero_label = 4
 
@@ -25,8 +26,9 @@ mnist_validation = DataSet(mnist.validation.images[val_idx], np.array(list(map(l
 mnist_test = DataSet(mnist.test.images[test_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.test.labels[test_idx]))), reshape=False)
 
 mnist = Datasets(train=mnist_train, validation=mnist_validation, test=mnist_test)
+"""
 
-num_classes = 2
+num_classes = 10
 dbg_steps = 20
 
 
@@ -96,7 +98,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
-    optimizer = torch.optim.SGD([p for p in model.parameters()], lr=0.1, momentum = 0.9, weight_decay=1e-6)
+    optimizer = torch.optim.SGD([p for p in model.parameters()], lr=1)
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
@@ -120,12 +122,13 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
 
         # forward
         logits, loss = model.loss(x, y, ex_wts)
-        print("Loss = {}".format(loss))
+        #print("Loss = {}".format(loss))
 
         # backward
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        print((model.fc5.weight.max() - model.fc5.weight.min()).data)
 
         if step % dbg_steps == 0 :
             model.eval()
