@@ -50,8 +50,15 @@ def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
     num_gold = int(len(mnist_labels)*gold_fraction)
     num_silver = len(mnist_labels) - num_gold
 
+    samesame = 0
+    different = 0
+
     for i in range(num_silver):
+        old_l = mnist_labels[i]
         mnist_labels[i] = np.random.choice(num_classes, p=corruption_matrix[mnist_labels[i]])
+        if mnist_labels[i] == old_l : samesame+=1
+        else : different+=1
+    print("Samesame = {}, different = {}".format(samesame, different))
 
     dataset = {'x': mnist_images, 'y': mnist_labels}
     gold = DataSet(dataset['x'][num_silver:], dataset['y'][num_silver:], reshape=False)
@@ -98,7 +105,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
-    optimizer = torch.optim.SGD([p for p in model.parameters()], lr=1)
+    optimizer = torch.optim.Adam([p for p in model.parameters()], lr=0.001)
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
@@ -128,7 +135,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print((model.fc5.weight.max() - model.fc5.weight.min()).data)
+        print((model.fc5.weight.max() - model.fc5.weight.min()).data, loss)
 
         if step % dbg_steps == 0 :
             model.eval()
@@ -147,7 +154,7 @@ def main(flags) :
     corruption_fnctn = uniform_mix_C if flags.corruption_type == 'uniform_mix' else flip_labels_C
 
     gold_fraction = 0.05
-    corruption_level = 0.3
+    corruption_level = 0.0
 
     train_and_test(flags, corruption_level, gold_fraction, corruption_fnctn)
 
