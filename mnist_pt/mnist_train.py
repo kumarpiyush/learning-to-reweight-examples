@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import tensorboard_logger as tbrd
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
 from tensorflow.contrib.learn.python.learn.datasets.base import Datasets
@@ -107,23 +108,13 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     model = LeNet()
     optimizer = torch.optim.Adam([p for p in model.parameters()], lr=0.001)
 
+    x, y = silver.next_batch(flags.batch_size)
+    x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
+
+    x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
+    x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
+
     for step in range(flags.num_steps) :
-        x, y = silver.next_batch(flags.batch_size)
-        x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
-
-        x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
-        x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
-
-        if step % dbg_steps == 0 :
-            model.eval()
-
-            pred = torch.max(model.forward(x_val), 1)[1]
-            old_val_acc = torch.sum(torch.eq(pred, y_val)).item() / float(y_val.shape[0])
-
-            pred = torch.max(model.forward(test_x), 1)[1]
-            old_test_acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
-            model.train()
-
         # get training example weights
         ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
 
@@ -135,22 +126,25 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print((model.fc5.weight.max() - model.fc5.weight.min()).data, loss)
 
-        if step % dbg_steps == 0 :
+        tmp=(model.fc5.weight.max() - model.fc5.weight.min()).data
+
+        tbrd.log_value("tmp", tmp, step=step)
+        tbrd.log_value("loss", loss, step=step)
+        print(tmp, loss)
+
+        if False and step % dbg_steps == 0 :
             model.eval()
 
-            pred = torch.max(model.forward(x_val), 1)[1]
-            new_val_acc = torch.sum(torch.eq(pred, y_val)).item() / float(y_val.shape[0])
-
             pred = torch.max(model.forward(test_x), 1)[1]
-            new_test_acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
+            test_acc = torch.sum(torch.eq(pred, test_y)).item() / float(test_y.shape[0])
             model.train()
 
-            print("Old val = {}, New val = {}. Old test = {}, New test = {}.".format(old_val_acc, new_val_acc, old_test_acc, new_test_acc))
+            print("Test acc = {}.".format(test_acc))
 
 
 def main(flags) :
+    tbrd.configure(flags.model_dir)
     corruption_fnctn = uniform_mix_C if flags.corruption_type == 'uniform_mix' else flip_labels_C
 
     gold_fraction = 0.05
@@ -161,6 +155,7 @@ def main(flags) :
 
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model_dir", default="model_dir")
     parser.add_argument("--corruption_type", default="flip_labels", type=str, choices=["uniform_mix", "flip_labels"])
     parser.add_argument("--num_steps", default=1000, type=int)
     parser.add_argument("--batch_size", default=100, type=int)
