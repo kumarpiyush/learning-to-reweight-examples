@@ -69,7 +69,7 @@ class LeNet(nn.Module) :
         tval = tval.view(-1, 1024)
 
         tval = F.relu(self.fc4.forward(tval))
-        logits = F.relu(self.fc5.forward(tval))
+        logits = self.fc5.forward(tval) # TODO
 
         return logits
 
