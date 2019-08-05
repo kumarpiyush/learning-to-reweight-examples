@@ -95,11 +95,13 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y).type(torch.LongTensor)
         x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val).type(torch.LongTensor)
 
-        # get training example weights
-        # ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
-
         # forward
-        logits, loss = model.loss(x, y)
+        if flags.method == "l2w" :
+            ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
+            logits, loss = model.loss(x, y, ex_wts)
+        else :
+            logits, loss = model.loss(x, y)
+
         print("Loss = {}".format(loss))
 
         # backward
@@ -125,7 +127,7 @@ def main(flags) :
     corruption_fnctn = uniform_mix_C if flags.corruption_type == 'uniform_mix' else flip_labels_C
 
     gold_fraction = 0.05
-    corruption_level = 0.0
+    corruption_level = 0.9
 
     train_and_test(flags, corruption_level, gold_fraction, corruption_fnctn)
 
@@ -137,7 +139,9 @@ if __name__ == "__main__" :
     parser.add_argument("--num_steps", default=1000, type=int)
     parser.add_argument("--batch_size", default=100, type=int)
     parser.add_argument("--nval", default=40, type=int)
+    parser.add_argument("--method", default="l2w", type=str, choices=["l2w", "baseline"])
 
     args = parser.parse_args()
+    print(args)
 
     main(args)
