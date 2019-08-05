@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import tensorboard_logger as tbrd
 from tensorflow.examples.tutorials.mnist import input_data
+from tensorflow.python.framework import dtypes
 from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
 from tensorflow.contrib.learn.python.learn.datasets.base import Datasets
 from collections import Counter
@@ -14,26 +15,11 @@ from model import LeNet, reweight_autodiff
 
 mnist = input_data.read_data_sets(train_dir='mnist', one_hot=False)
 
-"""
-one_label = 9
-zero_label = 4
-
-tr_idx = [i for i in np.arange(len(mnist.train.labels)) if (mnist.train.labels[i] in [one_label, zero_label])]
-val_idx = [i for i in np.arange(len(mnist.validation.labels)) if (mnist.validation.labels[i] in [one_label, zero_label])]
-test_idx = [i for i in np.arange(len(mnist.test.labels)) if (mnist.test.labels[i] in [one_label, zero_label])]
-
-mnist_train = DataSet(mnist.train.images[tr_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.train.labels[tr_idx]))), reshape=False)
-mnist_validation = DataSet(mnist.validation.images[val_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.validation.labels[val_idx]))), reshape=False)
-mnist_test = DataSet(mnist.test.images[test_idx], np.array(list(map(lambda x : 1 if x == one_label else 0, mnist.test.labels[test_idx]))), reshape=False)
-
-mnist = Datasets(train=mnist_train, validation=mnist_validation, test=mnist_test)
-"""
-
 num_classes = 10
 dbg_steps = 20
 
 
-def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
+def prepare_data(corruption_matrix, gold_fraction=0.05, merge_valset=True):
     np.random.seed(1)
 
     mnist_images = np.copy(mnist.train.images)
@@ -51,19 +37,12 @@ def prepare_data(corruption_matrix, gold_fraction=0.5, merge_valset=True):
     num_gold = int(len(mnist_labels)*gold_fraction)
     num_silver = len(mnist_labels) - num_gold
 
-    samesame = 0
-    different = 0
-
     for i in range(num_silver):
-        old_l = mnist_labels[i]
         mnist_labels[i] = np.random.choice(num_classes, p=corruption_matrix[mnist_labels[i]])
-        if mnist_labels[i] == old_l : samesame+=1
-        else : different+=1
-    print("Samesame = {}, different = {}".format(samesame, different))
 
-    dataset = {'x': mnist_images, 'y': mnist_labels}
-    gold = DataSet(dataset['x'][num_silver:], dataset['y'][num_silver:], reshape=False)
-    silver = DataSet(dataset['x'][:num_silver], dataset['y'][:num_silver], reshape=False)
+    # dtype flag is important to the DataSet class doesn't renormalize the images by /255
+    gold = DataSet(mnist_images[num_silver:], mnist_labels[num_silver:], reshape=False, dtype=dtypes.uint8)
+    silver = DataSet(mnist_images[:num_silver], mnist_labels[:num_silver], reshape=False, dtype=dtypes.uint8)
 
     return gold, silver
 
@@ -98,42 +77,39 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
     C = get_C(corruption_level)
 
     gold, silver = prepare_data(C, gold_fraction)
+
     print("Gold shape = {}, Silver shape = {}".format(gold.images.shape, silver.images.shape))
 
     # TODO : test on whole set
-    test_x = torch.from_numpy(mnist.test.images[:200].reshape([-1, 1, 28, 28]))
-    test_y = torch.from_numpy(mnist.test.labels[:200]).type(torch.LongTensor)
+    test_x = torch.from_numpy(mnist.test.images[:500].reshape([-1, 1, 28, 28]))
+    test_y = torch.from_numpy(mnist.test.labels[:500]).type(torch.LongTensor)
     print("Test shape = {}".format(test_x.shape))
 
     model = LeNet()
     optimizer = torch.optim.Adam([p for p in model.parameters()], lr=0.001)
 
-    x, y = silver.next_batch(flags.batch_size)
-    x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
-
-    x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y)
-    x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val)
-
     for step in range(flags.num_steps) :
+        x, y = silver.next_batch(flags.batch_size)
+        x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
+
+        x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y).type(torch.LongTensor)
+        x_val, y_val = torch.from_numpy(x_val.reshape([-1, 1, 28, 28])), torch.from_numpy(y_val).type(torch.LongTensor)
+
         # get training example weights
-        ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
+        # ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
 
         # forward
-        logits, loss = model.loss(x, y, ex_wts)
-        #print("Loss = {}".format(loss))
+        logits, loss = model.loss(x, y)
+        print("Loss = {}".format(loss))
 
         # backward
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        tmp=(model.fc5.weight.max() - model.fc5.weight.min()).data
-
-        tbrd.log_value("tmp", tmp, step=step)
         tbrd.log_value("loss", loss, step=step)
-        print(tmp, loss)
 
-        if False and step % dbg_steps == 0 :
+        if step % dbg_steps == 0 :
             model.eval()
 
             pred = torch.max(model.forward(test_x), 1)[1]
@@ -141,6 +117,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
             model.train()
 
             print("Test acc = {}.".format(test_acc))
+            tbrd.log_value("test_acc", test_acc, step=step)
 
 
 def main(flags) :

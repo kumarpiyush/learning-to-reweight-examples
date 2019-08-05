@@ -43,7 +43,7 @@ class DynamicLinear(nn.Module) :
         self.bias = param_dict[prefix + "bias"]
 
 class LeNet(nn.Module) :
-    def __init__(self, tensor_dict = {}) :
+    def __init__(self) :
         super(LeNet, self).__init__()
 
         self.conv1 = DynamicConv2D(1, 16, 5, padding=2)
@@ -54,22 +54,22 @@ class LeNet(nn.Module) :
         self.fc5 = DynamicLinear(100, 10)
 
     def forward(self, x) :
-        tval = self.conv1.forward(x)
+        tval = self.conv1(x)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
-        tval = self.conv2.forward(tval)
+        tval = self.conv2(tval)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
-        tval = self.conv3.forward(tval)
+        tval = self.conv3(tval)
         tval = F.max_pool2d(tval, kernel_size=3, stride=2, padding=1)
         tval = F.relu(tval)
 
         tval = tval.view(-1, 1024)
 
-        tval = F.relu(self.fc4.forward(tval))
-        logits = self.fc5.forward(tval) # TODO
+        tval = F.relu(self.fc4(tval))
+        logits = self.fc5(tval)
 
         return logits
 
