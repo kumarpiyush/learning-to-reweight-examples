@@ -127,15 +127,15 @@ def main(flags) :
     corruption_fnctn = uniform_mix_C if flags.corruption_type == 'uniform_mix' else flip_labels_C
 
     gold_fraction = 0.05
-    corruption_level = 0.9
 
-    train_and_test(flags, corruption_level, gold_fraction, corruption_fnctn)
+    train_and_test(flags, flags.corruption_level, gold_fraction, corruption_fnctn)
 
 
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_dir", default="model_dir")
     parser.add_argument("--corruption_type", default="flip_labels", type=str, choices=["uniform_mix", "flip_labels"])
+    parser.add_argument("--corruption_level", default=0.9, type=float)
     parser.add_argument("--num_steps", default=1000, type=int)
     parser.add_argument("--batch_size", default=100, type=int)
     parser.add_argument("--nval", default=40, type=int)
