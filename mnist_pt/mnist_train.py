@@ -33,6 +33,7 @@ def prepare_data(corruption_matrix, gold_fraction=0.05, merge_valset=True):
 
     mnist_images = mnist_images[indices]
     mnist_labels = mnist_labels[indices].astype(np.long)
+    mnist_labels_orig = np.copy(mnist_labels)
 
     num_gold = int(len(mnist_labels)*gold_fraction)
     num_silver = len(mnist_labels) - num_gold
@@ -42,7 +43,7 @@ def prepare_data(corruption_matrix, gold_fraction=0.05, merge_valset=True):
 
     # dtype flag is important to the DataSet class doesn't renormalize the images by /255
     gold = DataSet(mnist_images[num_silver:], mnist_labels[num_silver:], reshape=False, dtype=dtypes.uint8)
-    silver = DataSet(mnist_images[:num_silver], mnist_labels[:num_silver], reshape=False, dtype=dtypes.uint8)
+    silver = DataSet(mnist_images[:num_silver], np.array(list(zip(mnist_labels[:num_silver], mnist_labels_orig[:num_silver]))), reshape=False, dtype=dtypes.uint8)
 
     return gold, silver
 
@@ -90,6 +91,7 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
 
     for step in range(flags.num_steps) :
         x, y = silver.next_batch(flags.batch_size)
+        y, y_true = np.array([l[0] for l in y]), np.array([l[1] for l in y])
         x_val, y_val = gold.next_batch(min(flags.batch_size, flags.nval))
 
         x, y = torch.from_numpy(x.reshape([-1, 1, 28, 28])), torch.from_numpy(y).type(torch.LongTensor)
@@ -99,6 +101,17 @@ def train_and_test(flags, corruption_level=0, gold_fraction=0.5, get_C=uniform_m
         if flags.method == "l2w" :
             ex_wts = reweight_autodiff(model, x, y, x_val, y_val)
             logits, loss = model.loss(x, y, ex_wts)
+
+            if step % dbg_steps == 0 :
+                tbrd.log_histogram("ex_wts", ex_wts, step=step)
+                tbrd.log_value("More_than_0.01", sum([x > 0.01 for x in ex_wts]), step=step)
+                tbrd.log_value("More_than_0.05", sum([x > 0.05 for x in ex_wts]), step=step)
+                tbrd.log_value("More_than_0.1",  sum([x > 0.1  for x in ex_wts]), step=step)
+
+                mean_on_clean_labels = np.mean([ex_wts[i] for i in range(len(y)) if y[i] == y_true[i]])
+                mean_on_dirty_labels = np.mean([ex_wts[i] for i in range(len(y)) if y[i] != y_true[i]])
+                tbrd.log_value("mean_on_clean_labels", mean_on_clean_labels, step=step)
+                tbrd.log_value("mean_on_dirty_labels", mean_on_dirty_labels, step=step)
         else :
             logits, loss = model.loss(x, y)
 

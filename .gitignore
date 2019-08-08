@@ -121,4 +121,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-model_dir
+*model_dir
