@@ -49,21 +49,21 @@ def get_model(inputs,
 
     with tf.variable_scope('Model', reuse=reuse):
         inputs_ = tf.cast(tf.reshape(inputs, [-1, 28, 28, 1]), dtype)
-        labels = tf.cast(labels, dtype)
+        labels = tf.cast(labels, tf.int32)
 
         w_init = tf.truncated_normal_initializer(stddev=0.1)
         w1 = _get_var('w1', [5, 5, 1, 16], dtype, initializer=w_init)    # [14, 14, 16]
         w2 = _get_var('w2', [5, 5, 16, 32], dtype, initializer=w_init)    # [7, 7, 32]
         w3 = _get_var('w3', [5, 5, 32, 64], dtype, initializer=w_init)    # [4, 4, 64]
         w4 = _get_var('w4', [1024, 100], dtype, initializer=w_init)
-        w5 = _get_var('w5', [100, 1], dtype, initializer=w_init)
+        w5 = _get_var('w5', [100, 10], dtype, initializer=w_init)
 
         b_init = tf.constant_initializer(0.0)
         b1 = _get_var('b1', [16], dtype, initializer=b_init)
         b2 = _get_var('b2', [32], dtype, initializer=b_init)
         b3 = _get_var('b3', [64], dtype, initializer=b_init)
         b4 = _get_var('b4', [100], dtype, initializer=b_init)
-        b5 = _get_var('b5', [1], dtype, initializer=b_init)
+        b5 = _get_var('b5', [10], dtype, initializer=b_init)
 
         act = tf.nn.relu
 
@@ -88,15 +88,17 @@ def get_model(inputs,
         z5 = tf.add(tf.matmul(l4, w5), b5, name='z5')
 
         logits = tf.squeeze(z5)
-        out = tf.sigmoid(logits)
+        out = tf.nn.softmax(logits)
         if ex_wts is None:
             # Average loss.
             loss = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
+                tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels))
         else:
             # Weighted loss.
             loss = tf.reduce_sum(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels) * ex_wts)
+                tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels) * ex_wts)
+        
+        #loss = tf.Print(loss, [tf.shape(z5), tf.shape(logits), tf.shape(out)])
     return w_dict, loss, logits
 
 
