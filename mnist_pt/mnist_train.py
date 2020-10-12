@@ -141,7 +141,6 @@ def main(flags) :
 
     gold_fraction = 0.05
     corruption_level = 0.9
-
     train_and_test(flags, corruption_level, gold_fraction, corruption_fnctn)
 
 
